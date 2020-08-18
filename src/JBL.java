@@ -31,14 +31,23 @@ No dealing with the RGB like its a short int. We do things the byte way.
 All data is little-endian format. Don't think too hard about the actual code.
 It is a huge headache to understand these bit formats.
 
-Version: 1.1.0
+For the sake of versatility all members of the class are public & rely as little
+as possible on each other for data, relying mostly on params & class vars.
+This means you are responsible for using them in the right order, though.
+Just keep that in mind.
+
+For your benefit, the functions are actually in the order you should use them,
+with the exception of stripPadding & reverseRows whose location/existence in
+your program can vary a lot with your use-case.
+
+Version: 1.1.2
 */
 public class JBL
 {
 // class variables
-public int bmpSize,pxStart,dibSize,w,h,planes=1,bpp,compMethod,dataSize;
-public int Bpp,bppOut,pixels,pxLen,nLen;
-public String name,dir,bitFmtIn,bitFmtOut;
+public int bmpSize,dataStart,dibSize,w,h,planes=1,bpp,compMethod,dataSize;
+public int Bpp,bppOut,pixels,pxLen,nLen,bitmaskR,bitmaskG,bitmaskB,bitmaskA;
+public String name,dir,bitFmtIn,bitFmtOut,RGB8="RGB8";
 public String RGB24="RGB24",RGB555="RGB555",RGB565="RGB565",ARGB16="ARGB16";
 public byte[][] palette = new byte[256][3];
 public boolean bitFmtOutSet=false;
@@ -84,7 +93,7 @@ public void getBitmapVars(byte[] bitmap)
     bmp.getChar();//skip file signature
     bmpSize = bmp.getInt();
     bmp.getInt();//skip reserved bytes
-    pxStart = bmp.getInt();
+    dataStart = bmp.getInt();
     dibSize = bmp.getInt();
     switch(dibSize)
     {
@@ -264,7 +273,7 @@ public byte[] toRGB24(byte[] rawBytes)
             g = g | g >> 4;
             b = b | b >> 4;
             // change the int vars to bytes vars & add them to px array add
-            // them in reverse order b/c that is the way format is, ugh
+            // them in reverse order b/c that is the way the format is, ugh
             px[y+0] = (byte)b;
             px[y+1] = (byte)g;
             px[y+2] = (byte)r;
@@ -295,6 +304,10 @@ public byte[] toRGB16(byte[] rgb24)
             rgb16[x+0] = (byte)b1;
             rgb16[x+1] = (byte)b2;
         }
+        // A good location to set rgb555-specific bitmask info
+        bitmaskR = 31744;
+        bitmaskG = 992;
+        bitmaskB = 31;
     }
     else if(bitFmtOut.equals(ARGB16))
     {
@@ -324,6 +337,10 @@ public byte[] toRGB16(byte[] rgb24)
             rgb16[x+0] = (byte)b1;
             rgb16[x+1] = (byte)b2;
         }
+        // A good location to set rgb565-specific bitmask info
+        bitmaskR = 63488;
+        bitmaskG = 2016;
+        bitmaskB = 31;
     }
     return rgb16;
 }
@@ -370,7 +387,7 @@ public byte[] stripPadding(byte[] scanlines)
                 if(x<colorBytes)
                     rgb[dex1++] = scanlines[dex2++];
                 else
-                    dex2++;
+                    dex2++;//skip through padding
             }
         }
     }
@@ -406,11 +423,35 @@ public byte[] reverseRows(byte[] topDownLines)
     return trueScanlines;
 }
 
+// Set bpp-specific dib header info
+public void setDibSizeParams()
+{
+    if(bppOut==16)
+    {
+        dataStart  = 70;
+        dibSize    = 56;
+        compMethod = 3;
+    }
+    else
+    {
+        dataStart  = 54;
+        dibSize    = 40;
+        compMethod = 0;
+    }
+}
+
+// Sets bmpSize, requires padded scanlines size; run setDibSizeParams() first
+public void setBitmapSize(int dataLength)
+{
+    // Set BMP output size
+    bmpSize = dataLength+dataStart;
+}
+
 // Makes the final BMP image array
 public byte[] setBMP(byte[] scanlines, boolean vertFlip)
 {
-    // Set BMP output size
-    bmpSize = scanlines.length+54;
+    setDibSizeParams();
+    setBitmapSize(scanlines.length);
     // Get the BMP header
     byte[] bmpHeader = setHeader(scanlines.length,vertFlip);
     // Join the header and image data arrays then return
@@ -424,24 +465,32 @@ public byte[] setHeader(int dataLength, boolean hFlip)
     if(hFlip) h = -h;
     // If you want to know what the values in this function mean, read this
     // wikipedia page: wikipedia.org/wiki/BMP_file_format
-    byte[] header = new byte[54];
+    byte[] header = new byte[dataStart];
     ByteBuffer hdr = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
     hdr.put((byte)'B');
     hdr.put((byte)'M');
     hdr.putInt(bmpSize);
     hdr.putInt(0);
-    hdr.putInt(54);
-    hdr.putInt(40);
+    hdr.putInt(dataStart);
+    hdr.putInt(dibSize);
     hdr.putInt(w);
     hdr.putInt(h);
     hdr.putShort((short)1);
     hdr.putShort((short)bppOut);
-    hdr.putInt(0);
+    hdr.putShort((short)compMethod);
+    hdr.putShort((short)0);
     hdr.putInt(dataLength);
     hdr.putInt(2835);
     hdr.putInt(2835);
     hdr.putInt(0);
     hdr.putInt(0);
+    if(bppOut==16)
+    {
+        hdr.putInt(bitmaskR);
+        hdr.putInt(bitmaskG);
+        hdr.putInt(bitmaskB);
+        hdr.putInt(bitmaskA);
+    }
     return header;
 }
 

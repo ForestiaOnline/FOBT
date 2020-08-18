@@ -42,7 +42,7 @@ public Create(byte[] ba, String dir, String name)
         bl.getBitmapVars(ba);
         bl.setBitFmtOut("RGB565");
         // Strip the header off the image
-        fbb.position(bl.pxStart);
+        fbb.position(bl.dataStart);
         byte[] hdrless = bl.getImgBytes(fbb,0);
         // Forestia ABM format uses top-down scanlines
         byte[] revData = bl.reverseRows(hdrless);

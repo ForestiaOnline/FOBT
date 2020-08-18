@@ -42,7 +42,6 @@ public Extract(byte[] ba, String dir, String name, int fLen)
         bl.setFileVars(dir,name);
         bl.setBitmapVars(w,h,bpp);
         bl.set16BitFmtIn("RGB565");
-        bl.setBitFmtOut("RGB24");
 
         // Get image data
         byte[] hdrless = bl.getImgBytes(fbb,(fLen-16));
